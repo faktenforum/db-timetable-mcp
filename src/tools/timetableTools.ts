@@ -5,7 +5,7 @@ import type {
 	StationParams,
 	TimetableParams,
 } from "../api/types.js";
-import { ValidationError, asyncErrorHandler } from "../utils/errorHandling.js";
+import { asyncErrorHandler, ValidationError } from "../utils/errorHandling.js";
 import { type LogMetadata, logger } from "../utils/logger.js";
 
 const TimetableParamsSchema = z.object({
