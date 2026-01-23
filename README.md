@@ -49,7 +49,7 @@ DB_TIMETABLE_CLIENT_ID=deine-client-id
 DB_TIMETABLE_CLIENT_SECRET=dein-client-secret
 TRANSPORT_TYPE=stdio
 PORT=8080
-SSE_ENDPOINT=/sse
+SSE_ENDPOINT=/mcp
 LOG_LEVEL=info
 ```
 
@@ -59,7 +59,7 @@ LOG_LEVEL=info
 - `DB_TIMETABLE_CLIENT_SECRET`: Client-Secret für die DB API (erforderlich)
 - `TRANSPORT_TYPE`: Transporttyp für den MCP-Server (`stdio` oder `sse`, Standard: `stdio`)
 - `PORT`: Port für den SSE-Server (Standard: `8080`)
-- `SSE_ENDPOINT`: Endpunkt für SSE-Verbindungen (Standard: `/sse`)
+- `SSE_ENDPOINT`: Endpunkt für HTTP-Stream-Verbindungen (Standard: `/mcp`)
 - `LOG_LEVEL`: Logging-Level (`debug`, `info`, `warn`, `error`, Standard: `info`)
 
 ## Verwendung

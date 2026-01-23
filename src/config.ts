@@ -15,8 +15,10 @@ try {
 	// Ignore if .env file doesn't exist - use process.env directly
 }
 
-// Konfigurationswerte
-// Priorität: process.env (Docker/Production) > .env Datei (lokale Entwicklung)
+/**
+ * Server configuration.
+ * Priority: process.env (Docker/Production) > .env file (local development)
+ */
 export const config = {
 	server: {
 		name: "DB Timetables MCP Server",
@@ -24,7 +26,7 @@ export const config = {
 		transportType: process.env.TRANSPORT_TYPE || "stdio", // 'stdio' oder 'httpStream'
 		port: Number.parseInt(process.env.PORT || "8080", 10),
 		host: process.env.HOST || "0.0.0.0", // Listen on all interfaces for Docker
-		endpoint: process.env.SSE_ENDPOINT || "/sse",
+		endpoint: process.env.SSE_ENDPOINT || "/mcp",
 	},
 	api: {
 		baseUrl:
