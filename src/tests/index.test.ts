@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-vi.mock("fastmcp", () => ({
-	FastMCP: vi.fn().mockImplementation(() => ({
-		addTool: vi.fn(),
-		addResourceTemplate: vi.fn(),
-		start: vi.fn(),
-		on: vi.fn(),
-	})),
-}));
+vi.mock("fastmcp", () => {
+	const MockFastMCP = vi.fn(function (this: Record<string, unknown>) {
+		this.addTool = vi.fn();
+		this.addResourceTemplate = vi.fn();
+		this.start = vi.fn().mockResolvedValue(undefined);
+		this.on = vi.fn();
+	});
+	return { FastMCP: MockFastMCP };
+});
 
 vi.mock("../config.js", () => ({
 	config: {
@@ -140,6 +141,7 @@ describe("MCP Server", () => {
 					version: "1.0.0",
 					transportType: "sse",
 					port: 9000,
+					host: "0.0.0.0",
 					endpoint: "test-endpoint",
 				},
 				api: {
@@ -159,10 +161,11 @@ describe("MCP Server", () => {
 		const server = serverModule.default;
 
 		expect(server.start).toHaveBeenCalledWith({
-			transportType: "sse",
-			sse: {
+			transportType: "httpStream",
+			httpStream: {
 				endpoint: "/test-endpoint",
 				port: 9000,
+				host: "0.0.0.0",
 			},
 		});
 	});

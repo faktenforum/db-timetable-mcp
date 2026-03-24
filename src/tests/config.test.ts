@@ -47,7 +47,7 @@ describe("Konfiguration", () => {
 
 		expect(config.server.transportType).toBe("stdio");
 		expect(config.server.port).toBe(8080);
-		expect(config.server.endpoint).toBe("/sse");
+		expect(config.server.endpoint).toBe("/mcp");
 		expect(config.logging.level).toBe("info");
 		expect(config.api.baseUrl).toBe(
 			"https://apis.deutschebahn.com/db-api-marketplace/apis/timetables/v1",
@@ -68,22 +68,23 @@ describe("Konfiguration", () => {
 		expect(config.logging.level).toBe("debug");
 	});
 
-	test("beendet den Prozess, wenn API-Credentials fehlen", async () => {
+	test("warnt, wenn API-Credentials fehlen", async () => {
 		// Entferne API-Credentials
 		process.env.DB_TIMETABLE_CLIENT_ID = "";
 		process.env.DB_TIMETABLE_CLIENT_SECRET = "";
 
-		// Ausgabe umlenken, um Fehlermeldungen zu unterdrücken
-		const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		// Ausgabe umlenken, um Warnmeldungen zu prüfen
+		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		try {
-			await import("../config.js");
-		} catch (_e) {
-			// Ignorieren, da der Prozess beendet werden würde
-		}
+		const { config } = await import("../config.js");
 
-		expect(process.exit).toHaveBeenCalledWith(1);
-		expect(consoleSpy).toHaveBeenCalled();
+		expect(consoleSpy).toHaveBeenCalledWith(
+			expect.stringContaining("API-Zugangsdaten fehlen"),
+		);
+		// Server should NOT exit - it continues without credentials for graceful degradation
+		expect(process.exit).not.toHaveBeenCalled();
+		expect(config.api.clientId).toBe("");
+		expect(config.api.clientSecret).toBe("");
 
 		consoleSpy.mockRestore();
 	});
