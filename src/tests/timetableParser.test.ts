@@ -125,6 +125,18 @@ describe("DB timetable XML parser", () => {
 		expect(timetable.stops[0].departure?.effective.platform).toBe("8");
 	});
 
+	test("liest eine leere Stunde als Fahrplan ohne Halte", () => {
+		// `/plan` und `/fchg` antworten ohne Halte mit `<timetable/>`.
+		const timetable = parseTimetableXml("<timetable/>", "8011160");
+
+		expect(timetable.station.evaNo).toBe("8011160");
+		expect(timetable.stops).toEqual([]);
+	});
+
+	test("weist eine Antwort ohne timetable zurück", () => {
+		expect(() => parseTimetableXml("<stations/>")).toThrow("timetable fehlt");
+	});
+
 	test("weist fehlerhaftes XML mit einer verständlichen Meldung zurück", () => {
 		expect(() => parseTimetableXml("<timetable><s></timetable>")).toThrow(
 			"Ungültige XML-Antwort der DB Timetables API",

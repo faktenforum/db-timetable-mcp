@@ -269,12 +269,14 @@ export function parseTimetableXml(
 	xml: string,
 	stationEvaNo?: string,
 ): TimetableDocument {
-	const timetable = asNode(parseXml(xml).timetable);
-	if (!timetable) {
+	const root = parseXml(xml);
+	if (!("timetable" in root)) {
 		throw new Error(
 			"Ungültige XML-Antwort der DB Timetables API: timetable fehlt",
 		);
 	}
+	// Eine Stunde ohne Halte kommt als `<timetable/>`, das der Parser zu "" macht.
+	const timetable = asNode(root.timetable) ?? {};
 	// `/rchg` und `/fchg` nennen sie am Root, `/plan` nur in der Anfrage.
 	const evaNo = asString(timetable.eva) ?? stationEvaNo;
 	return {
