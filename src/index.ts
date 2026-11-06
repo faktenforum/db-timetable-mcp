@@ -1,78 +1,52 @@
-import { FastMCP } from "fastmcp";
-import { config } from "./config.js";
-import { resources } from "./resources/index.js";
-import { tools } from "./tools/index.js";
+#!/usr/bin/env node
+
+import { pathToFileURL } from "node:url";
+import { config } from "./env.js";
+import { startHttpServer, startStdioServer } from "./transport.js";
 import { logger } from "./utils/logger.js";
 
-const server = new FastMCP({
-	name: config.server.name,
-	version: config.server.version as `${number}.${number}.${number}`,
-});
-
-for (const tool of tools) {
-	logger.info(`Tool hinzugefügt: ${tool.name}`);
-	// @ts-ignore
-	server.addTool(tool);
+function registerShutdown(close: () => Promise<void>): void {
+	for (const signal of ["SIGINT", "SIGTERM"] as const) {
+		process.once(signal, () => {
+			logger.info("Server wird beendet", { signal });
+			void close()
+				.catch((error) => logger.error("Fehler beim Beenden", { error }))
+				.finally(() => {
+					process.exitCode = 0;
+				});
+		});
+	}
 }
 
-for (const resource of resources) {
-	logger.info(`Ressource hinzugefügt: ${resource.name}`);
-	// @ts-ignore
-	server.addResourceTemplate(resource);
-}
-
-logger.info(`Starte ${config.server.name} v${config.server.version}`);
-
-if (config.server.transportType === "sse") {
-	logger.info(`Server startet im SSE-Modus auf Port ${config.server.port}`);
-
-	const endpoint = config.server.endpoint.startsWith("/")
-		? config.server.endpoint
-		: `/${config.server.endpoint}`;
-
-	server.start({
-		transportType: "sse",
-		sse: {
-			endpoint: endpoint as `/${string}`,
-			port: config.server.port,
-		},
+export async function main(): Promise<void> {
+	logger.info(`${config.server.name} v${config.server.version} startet`, {
+		transport: config.server.transport,
 	});
-} else {
-	logger.info("Server startet im stdio-Modus");
-	server.start({
-		transportType: "stdio",
+
+	if (config.server.transport === "http") {
+		const httpServer = await startHttpServer();
+		registerShutdown(
+			() =>
+				new Promise((resolve, reject) => {
+					httpServer.close((error) => (error ? reject(error) : resolve()));
+				}),
+		);
+		return;
+	}
+
+	const server = await startStdioServer();
+	registerShutdown(() => server.close());
+}
+
+const isMain = Boolean(
+	process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url,
+);
+
+if (isMain) {
+	main().catch((error) => {
+		logger.error("Server konnte nicht gestartet werden", { error });
+		process.exitCode = 1;
 	});
 }
 
-server.on("connect", (event) => {
-	// @ts-ignore - FastMCP Session-Typ hat möglicherweise keine id-Eigenschaft
-	const sessionId = event.session?.id || "unbekannt";
-	logger.info("Client verbunden", { sessionId });
-});
-
-server.on("disconnect", (event) => {
-	// @ts-ignore - FastMCP Session-Typ hat möglicherweise keine id-Eigenschaft
-	const sessionId = event.session?.id || "unbekannt";
-	logger.info("Client getrennt", { sessionId });
-});
-
-process.on("SIGINT", () => {
-	logger.info("Server wird beendet (SIGINT)");
-	process.exit(0);
-});
-
-process.on("SIGTERM", () => {
-	logger.info("Server wird beendet (SIGTERM)");
-	process.exit(0);
-});
-
-process.on("uncaughtException", (error) => {
-	logger.error("Unbehandelte Ausnahme", { error });
-	process.exit(1);
-});
-
-process.on("unhandledRejection", (reason) => {
-	logger.error("Unbehandelte Promise-Ablehnung", { reason });
-});
-
-export default server;
+export { createServer } from "./server.js";

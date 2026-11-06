@@ -1,88 +1,81 @@
-import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, test } from "vitest";
+import { createConfig, getEnvFilePaths } from "../config.js";
 
-// Mock von process und dotenv
-vi.mock('node:path', () => ({
-    default: {
-        dirname: vi.fn(() => '/mock/dir'),
-        resolve: vi.fn(() => '/mock/path/.env')
-    }
-}));
+describe("Konfiguration", () => {
+	test("verwendet sichere Standards für lokalen stdio-Betrieb", () => {
+		const config = createConfig({});
 
-vi.mock('dotenv', () => ({
-    default: {
-        config: vi.fn()
-    }
-}));
+		expect(config.server).toMatchObject({
+			transport: "stdio",
+			host: "127.0.0.1",
+			port: 3000,
+			endpoint: "/mcp",
+		});
+		expect(config.logging.level).toBe("info");
+	});
 
-describe('Konfiguration', () => {
-    // Speichere originale Umgebungsvariablen
-    const originalEnv = { ...process.env };
-    const originalExit = process.exit;
+	test("unterstützt neue Variablen und normalisiert Listen", () => {
+		const config = createConfig({
+			MCP_TRANSPORT: "http",
+			HOST: "0.0.0.0",
+			PORT: "8080",
+			MCP_ENDPOINT: "rail",
+			ALLOWED_HOSTS: "mcp.example.com, localhost ",
+			LOG_LEVEL: "debug",
+			DB_TIMETABLE_CLIENT_ID: "client-id",
+			DB_TIMETABLE_CLIENT_SECRET: "client-secret",
+		});
 
-    beforeEach(() => {
-        // Mock der process.exit
-        process.exit = vi.fn() as unknown as (code?: number) => never;
+		expect(config.server).toMatchObject({
+			transport: "http",
+			host: "0.0.0.0",
+			port: 8080,
+			endpoint: "/rail",
+			allowedHosts: ["mcp.example.com", "localhost"],
+		});
+		expect(config.api).toMatchObject({
+			clientId: "client-id",
+			clientSecret: "client-secret",
+		});
+	});
 
-        // Zuvor geladene Module löschen
-        vi.resetModules();
+	test("übersetzt alte SSE-Konfiguration auf Streamable HTTP", () => {
+		const config = createConfig({
+			TRANSPORT_TYPE: "sse",
+			SSE_ENDPOINT: "/legacy",
+		});
 
-        // Umgebungsvariablen zurücksetzen
-        process.env = { ...originalEnv };
+		expect(config.server.transport).toBe("http");
+		expect(config.server.endpoint).toBe("/legacy");
+	});
 
-        // Grundlegende API-Credentials setzen, die für das Laden der Konfiguration benötigt werden
-        process.env.DB_TIMETABLE_CLIENT_ID = 'test-client-id';
-        process.env.DB_TIMETABLE_CLIENT_SECRET = 'test-client-secret';
-    });
+	test("weist ungültige Ports früh zurück", () => {
+		expect(() => createConfig({ PORT: "70000" })).toThrow(
+			"Ungültige Server-Konfiguration",
+		);
+	});
 
-    afterEach(() => {
-        // Originale Umgebungsvariablen und Exit-Funktion wiederherstellen
-        process.env = originalEnv;
-        process.exit = originalExit;
+	test("verlangt bei öffentlicher Bindung eine Host-Allowlist", () => {
+		expect(() => createConfig({ HOST: "0.0.0.0" })).toThrow("ALLOWED_HOSTS");
+	});
 
-        vi.clearAllMocks();
-    });
+	test("sucht .env sowohl im Arbeitsverzeichnis als auch neben dist", () => {
+		const paths = getEnvFilePaths(
+			{},
+			"file:///project/dist/config.js",
+			"/launcher-directory",
+		);
 
-    test('lädt die Standardkonfiguration, wenn keine Umgebungsvariablen gesetzt sind', async () => {
-        const { config } = await import('../config.js');
+		expect(paths).toEqual(["/launcher-directory/.env", "/project/.env"]);
+	});
 
-        expect(config.server.transportType).toBe('stdio');
-        expect(config.server.port).toBe(8080);
-        expect(config.server.endpoint).toBe('/sse');
-        expect(config.logging.level).toBe('info');
-        expect(config.api.baseUrl).toBe('https://apis.deutschebahn.com/db-api-marketplace/apis/timetables/v1');
-    });
-
-    test('nutzt Umgebungsvariablen, wenn gesetzt', async () => {
-        process.env.TRANSPORT_TYPE = 'sse';
-        process.env.PORT = '9000';
-        process.env.SSE_ENDPOINT = '/custom-endpoint';
-        process.env.LOG_LEVEL = 'debug';
-
-        const { config } = await import('../config.js');
-
-        expect(config.server.transportType).toBe('sse');
-        expect(config.server.port).toBe(9000);
-        expect(config.server.endpoint).toBe('/custom-endpoint');
-        expect(config.logging.level).toBe('debug');
-    });
-
-    test('beendet den Prozess, wenn API-Credentials fehlen', async () => {
-        // Entferne API-Credentials
-        process.env.DB_TIMETABLE_CLIENT_ID = '';
-        process.env.DB_TIMETABLE_CLIENT_SECRET = '';
-
-        // Ausgabe umlenken, um Fehlermeldungen zu unterdrücken
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
-
-        try {
-            await import('../config.js');
-        } catch (e) {
-            // Ignorieren, da der Prozess beendet werden würde
-        }
-
-        expect(process.exit).toHaveBeenCalledWith(1);
-        expect(consoleSpy).toHaveBeenCalled();
-
-        consoleSpy.mockRestore();
-    });
-}); 
+	test("respektiert einen expliziten .env-Pfad", () => {
+		expect(
+			getEnvFilePaths(
+				{ DOTENV_CONFIG_PATH: "/secure/db.env" },
+				"file:///project/dist/config.js",
+				"/launcher-directory",
+			),
+		).toEqual(["/secure/db.env"]);
+	});
+});

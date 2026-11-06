@@ -3,7 +3,6 @@ node_modules/
 npm-debug.log
 yarn-error.log
 yarn-debug.log
-package-lock.json
 .pnpm-lock.yaml
 
 # Kompilierte Ausgabe
@@ -17,6 +16,12 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Cloudflare Worker: lokale Secrets und Wrangler-Zustand
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
 
 # Logs
 logs/
@@ -51,4 +56,9 @@ temp/
 
 # Betriebssystemdateien
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Lokale Agent-/Editor-Dateien
+.agent/
+.claude/
+GEMINI.md

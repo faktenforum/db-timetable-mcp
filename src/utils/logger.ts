@@ -1,83 +1,79 @@
-import { config } from "../config.js";
-
-export enum LogLevel {
-	DEBUG = "debug",
-	INFO = "info",
-	WARN = "warn",
-	ERROR = "error",
-}
+export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogMetadata = Record<string, unknown>;
+export type LogSink = (line: string) => void;
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
-	[LogLevel.DEBUG]: 0,
-	[LogLevel.INFO]: 1,
-	[LogLevel.WARN]: 2,
-	[LogLevel.ERROR]: 3,
+	debug: 0,
+	info: 1,
+	warn: 2,
+	error: 3,
 };
 
-export type LogMetadata = Record<string, unknown>;
-
-class Logger {
-	private level: LogLevel;
-
-	constructor() {
-		this.level = (config.logging.level as LogLevel) || LogLevel.INFO;
-	}
-
-	private shouldLog(level: LogLevel): boolean {
-		return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[this.level];
-	}
-
-	private formatMessage(
-		level: LogLevel,
-		message: string,
-		meta?: LogMetadata,
-	): string {
-		const timestamp = new Date().toISOString();
-		const metaStr = meta ? ` ${JSON.stringify(meta)}` : "";
-		return `[${timestamp}] [${level.toUpperCase()}] ${message}${metaStr}`;
-	}
-
-	private log(level: LogLevel, message: string, meta?: LogMetadata): void {
-		if (!this.shouldLog(level)) return;
-
-		const formattedMessage = this.formatMessage(level, message, meta);
-
-		switch (level) {
-			case LogLevel.ERROR:
-				console.error(formattedMessage);
-				break;
-			case LogLevel.WARN:
-				console.warn(formattedMessage);
-				break;
-			case LogLevel.INFO:
-				console.info(formattedMessage);
-				break;
-			case LogLevel.DEBUG:
-				console.debug(formattedMessage);
-				break;
-			default:
-				console.log(formattedMessage);
+function serializeMetadata(metadata: LogMetadata): string {
+	const seen = new WeakSet<object>();
+	return JSON.stringify(metadata, (_key, value: unknown) => {
+		if (value instanceof Error) {
+			return { name: value.name, message: value.message, stack: value.stack };
 		}
-	}
+		if (value && typeof value === "object") {
+			if (seen.has(value)) return "[Circular]";
+			seen.add(value);
+		}
+		return value;
+	});
+}
 
-	debug(message: string, meta?: LogMetadata): void {
-		this.log(LogLevel.DEBUG, message, meta);
-	}
+/**
+ * Node schreibt Statuslogs nach stderr, damit stdout für MCP über stdio frei
+ * bleibt. Edge-Runtimes ohne `process.stderr` (Cloudflare Workers) fallen auf
+ * `console.error` zurück, das dort ebenfalls auf stderr geht.
+ */
+const stderrSink: LogSink = (line) => {
+	const nodeProcess = (
+		globalThis as {
+			process?: { stderr?: { write?: (chunk: string) => void } };
+		}
+	).process;
 
-	info(message: string, meta?: LogMetadata): void {
-		this.log(LogLevel.INFO, message, meta);
+	if (typeof nodeProcess?.stderr?.write === "function") {
+		nodeProcess.stderr.write(line);
+		return;
 	}
+	console.error(line.trimEnd());
+};
 
-	warn(message: string, meta?: LogMetadata): void {
-		this.log(LogLevel.WARN, message, meta);
-	}
-
-	error(message: string, meta?: LogMetadata): void {
-		this.log(LogLevel.ERROR, message, meta);
-	}
+export class Logger {
+	constructor(
+		private level: LogLevel = "info",
+		private sink: LogSink = stderrSink,
+	) {}
 
 	setLevel(level: LogLevel): void {
 		this.level = level;
+	}
+
+	private log(level: LogLevel, message: string, metadata?: LogMetadata): void {
+		if (LOG_LEVEL_PRIORITY[level] < LOG_LEVEL_PRIORITY[this.level]) return;
+		const context = metadata ? ` ${serializeMetadata(metadata)}` : "";
+		this.sink(
+			`[${new Date().toISOString()}] [${level.toUpperCase()}] ${message}${context}\n`,
+		);
+	}
+
+	debug(message: string, metadata?: LogMetadata): void {
+		this.log("debug", message, metadata);
+	}
+
+	info(message: string, metadata?: LogMetadata): void {
+		this.log("info", message, metadata);
+	}
+
+	warn(message: string, metadata?: LogMetadata): void {
+		this.log("warn", message, metadata);
+	}
+
+	error(message: string, metadata?: LogMetadata): void {
+		this.log("error", message, metadata);
 	}
 }
 
